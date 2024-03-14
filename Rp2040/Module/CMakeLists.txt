@@ -13,7 +13,9 @@ hardware_pio
 hardware_pwm
 hardware_gpio
 hardware_spi
-hardware_uart)
+hardware_uart
+pico_multicore
+pico_sync)
 
 pico_add_extra_outputs(pwm_io_main)
 
