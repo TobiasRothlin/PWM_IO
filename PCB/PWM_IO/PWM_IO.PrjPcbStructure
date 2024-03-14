@@ -1,0 +1,3 @@
+Record=TopLevelDocument|FileName=TopLevel.SchDoc|SheetNumber=1
+Record=SheetSymbol|SourceDocument=TopLevel.SchDoc|Designator=U_LevelShifter|SchDesignator=U_LevelShifter|FileName=LevelShifter.SchDoc|SheetNumber=3|SymbolType=Normal|RawFileName=LevelShifter.SchDoc|DesignItemId= |SourceLibraryName= |ObjectKind=Sheet Symbol|RevisionGUID= |ItemGUID= |VaultGUID= 
+Record=SheetSymbol|SourceDocument=TopLevel.SchDoc|Designator=U_PiPico|SchDesignator=U_PiPico|FileName=PiPico.SchDoc|SheetNumber=2|SymbolType=Normal|RawFileName=PiPico.SchDoc|DesignItemId= |SourceLibraryName= |ObjectKind=Sheet Symbol|RevisionGUID= |ItemGUID= |VaultGUID= 

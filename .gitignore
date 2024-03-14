@@ -1,0 +1,12 @@
+.vscode
+build
+CMakeFiles
+generated
+pico-sdk
+build.ninja
+/PiPico/CMakeCache.txt
+/PiPico/cmake_install.cmake
+/PiPico/pico_sdk_import.cmake
+*.cmake
+/ExampleSensorLibs/
+.idea
