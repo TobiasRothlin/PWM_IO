@@ -12,16 +12,20 @@ PwmOut::PwmOut(uint *pin_list, uint num_of_pin,u_int8_t frequency_mode)
     if( frequency_mode == 1)
     {
         pwmCounter = 10000;
+        pwmFrequency = 125.0;
         printf("125Hz\n");
+        
     }
     else if (frequency_mode == 2)
     {
         pwmCounter = 5000;
+        pwmFrequency = 250.0;
         printf("250Hz\n");
     }
     else
     {
         pwmCounter = 25000;
+        pwmFrequency = 50.0;
         printf("50Hz\n");
     }
     
@@ -52,7 +56,13 @@ PwmOut::~PwmOut()
     // Perform cleanup if necessary
 }
 
-void PwmOut::setPWM(uint idx,float value)
+void PwmOut::setDutyCycle(uint idx,float duty_cycle)
 {
-    pwm_set_gpio_level(pwm_pins[idx],(uint16_t)(pwmCounter * value));
+    pwm_set_gpio_level(pwm_pins[idx],(uint16_t)(pwmCounter * duty_cycle));
+}
+
+void PwmOut::setPulseWidth(uint idx,float pulse_width)
+{
+    float duty_cycle = pulse_width / (1.0/pwmFrequency);
+    setDutyCycle(idx,duty_cycle);
 }

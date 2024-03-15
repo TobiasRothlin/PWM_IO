@@ -30,7 +30,7 @@ uint input_pin_list[NUMBER_OF_INPUT_PINS] = {16, 17, 18, 19, 20, 21, 22, 28};
 uint output_pin_list[NUMBER_OF_OUTPUT_PINS] = {2, 3, 4, 5, 6, 7, 8, 9};
 
 const int LOOP_THROUGH_ENABLE_PIN = 14;
-const int CONFIG_ENABLE_PIN = 15;
+const int DUTY_CYCLE_MODE = 15;
 
 const int OUTPUT_FREQUENCY_SELECTOR_A_PIN = 26;
 const int OUTPUT_FREQUENCY_SELECTOR_B_PIN = 27;
@@ -96,9 +96,10 @@ bool spi_new_data = false;
 
 uint8_t debug_output_buffer[34] = {0};
 
+uint8_t inputBuffer[(uint16_t)(sizeof(float) * 8) + 2];
+uint8_t outputBuffer[(uint16_t)(sizeof(float) * 8) + 2];
 
-uint8_t inputBuffer[(uint16_t)(sizeof(float) * 8)+2];
-uint8_t outputBuffer[(uint16_t)(sizeof(float) * 8)+2];
+// !! The SPI Interface is not working properly from the SDK Thus 2 Additional Bytes are added to the buffer
 
 float core1_input_values[8] = {0, 0, 0, 0, 0, 0, 0, 0};
 float core1_output_values[8] = {0, 0, 0, 0, 0, 0, 0, 0};
@@ -121,13 +122,13 @@ float loop_through_matrix[8][8] = {
 
 void core1_entry()
 {
-    
+
     while (true)
     {
         if (spi_is_readable(spi1))
-        {   
+        {
 
-            spi_write_read_blocking(spi1, outputBuffer, inputBuffer, (sizeof(float) * 8)+2);
+            spi_write_read_blocking(spi1, outputBuffer, inputBuffer, (sizeof(float) * 8) + 2);
 
             for (int i = 0; i < 8; i++)
             {
@@ -135,7 +136,7 @@ void core1_entry()
             }
 
             critical_section_enter_blocking(&cs1);
-            for(int i = 0; i < 8; i++)
+            for (int i = 0; i < 8; i++)
             {
                 pwm_transfer_register_output_values[i] = core1_input_values[i];
                 core1_output_values[i] = pwm_transfer_register_input_values[i];
@@ -143,19 +144,18 @@ void core1_entry()
             spi_new_data = true;
             critical_section_exit(&cs1);
 
-            for(int i = 0; i < 8; i++)
+            for (int i = 0; i < 8; i++)
             {
                 floatToUint8(core1_output_values[i], outputBuffer + (sizeof(float) * i));
             }
 
             float temp = 0;
-            for(int i = 0; i < 8; i++)
-            {   
+            for (int i = 0; i < 8; i++)
+            {
                 uint8ArrayToFloat(outputBuffer, i * sizeof(float), &temp);
-                //printf("%5.4f,", temp);
+                // printf("%5.4f,", temp);
             }
-            //printf("\n");
-            
+            // printf("\n");
         }
     }
 }
@@ -174,8 +174,8 @@ int main()
 
     gpio_init(LOOP_THROUGH_ENABLE_PIN);
     gpio_set_dir(LOOP_THROUGH_ENABLE_PIN, GPIO_IN);
-    gpio_init(CONFIG_ENABLE_PIN);
-    gpio_set_dir(CONFIG_ENABLE_PIN, GPIO_IN);
+    gpio_init(DUTY_CYCLE_MODE);
+    gpio_set_dir(DUTY_CYCLE_MODE, GPIO_IN);
 
     spi_init(spi1, 1000 * 1000);
     spi_set_slave(spi1, true);
@@ -221,8 +221,15 @@ int main()
 
             // Assigns the new values (DudyCycle) to the pwm_input_values array
             if (new_read_values[2] > 0)
-            {
-                core0_input_values[idx] = new_read_values[2];
+            {   
+                if(gpio_get(DUTY_CYCLE_MODE))
+                {
+                    core0_input_values[idx] = new_read_values[2];
+                }
+                else
+                {
+                    core0_input_values[idx] = new_read_values[0];
+                }
             }
         }
 
@@ -239,29 +246,46 @@ int main()
                     core0_output_values[i] += core0_input_values[j] * loop_through_matrix[j][i];
                 }
             }
+
+            for (int idx = 0; idx < 8; idx++)
+            {
+                if (gpio_get(DUTY_CYCLE_MODE))
+                {
+                    pwmOut.setDutyCycle(idx, core0_output_values[idx]);
+                }
+                else
+                {
+                    pwmOut.setPulseWidth(idx, core0_output_values[idx]);
+                }
+            }
         }
         // Update Input/Output Buffers
-        else if (spi_new_data)
+        if (spi_new_data)
         {
             critical_section_enter_blocking(&cs1);
-            for(int i = 0; i < 8; i++)
+            for (int i = 0; i < 8; i++)
             {
                 pwm_transfer_register_input_values[i] = core0_input_values[i];
                 core0_output_values[i] = pwm_transfer_register_output_values[i];
             }
             spi_new_data = false;
             critical_section_exit(&cs1);
+
+            if (!gpio_get(LOOP_THROUGH_ENABLE_PIN))
+            {
+                for (int idx = 0; idx < 8; idx++)
+                {
+                    if (gpio_get(DUTY_CYCLE_MODE))
+                    {
+                        pwmOut.setDutyCycle(idx, core0_output_values[idx]);
+                    }
+                    else
+                    {
+                        pwmOut.setPulseWidth(idx, core0_output_values[idx]);
+                    }
+                }
+            }
         }
-
-        // Write the new output values
-        for (int idx = 0; idx < 8; idx++)
-        {
-            //printf("PWM %1d:%7.4f, ", idx, core0_output_values[idx]);
-            pwmOut.setPWM(idx, core0_output_values[idx]);
-        }
-
-        //printf("\n");
-
         gpio_put(LED_DEBUG_PIN, 0);
     }
 }

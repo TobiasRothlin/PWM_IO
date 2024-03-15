@@ -19,12 +19,14 @@ public:
     ~PwmOut();
 
     // Member functions
-    void setPWM(uint idx,float value);
+    void setDutyCycle(uint idx,float duty_cycle);
+    void setPulseWidth(uint idx,float pulse_width);
 
 
 private:
     uint pwm_pins [8];
     uint16_t pwmCounter = 25000;
+    float pwmFrequency = 50.0;
 };
 
 #endif
