@@ -8,6 +8,7 @@
 
 #include "hardware/spi.h"
 #include "hardware/uart.h"
+#include "pico/binary_info.h"
 
 #include "pico/multicore.h"
 #include "pico/sync.h"
@@ -34,10 +35,10 @@ const int CONFIG_ENABLE_PIN = 15;
 const int OUTPUT_FREQUENCY_SELECTOR_A_PIN = 26;
 const int OUTPUT_FREQUENCY_SELECTOR_B_PIN = 27;
 
-const int SPI_SLAVE_SCK_PIN = 10;
-const int SPI_SLAVE_MOSI_PIN = 12;
-const int SPI_SLAVE_MISO_PIN = 11;
-const int SPI_SLAVE_CS_PIN = 13;
+const uint32_t SPI_SLAVE_SCK_PIN = 10;
+const uint32_t SPI_SLAVE_MOSI_PIN = 12;
+const uint32_t SPI_SLAVE_MISO_PIN = 11;
+const uint32_t SPI_SLAVE_CS_PIN = 13;
 
 const int LED_DEBUG_PIN = 1;
 
@@ -71,6 +72,17 @@ void floatToUint8Array(float *input, uint8_t *output, int startIndex)
     }
 }
 
+void floatToUint8(float input, u_int8_t *desination)
+{
+    uint8_t *bytePointer = (uint8_t *)&input;
+
+    for (size_t i = 0; i < sizeof(float); i++)
+    {
+        desination[i] = *bytePointer;
+        bytePointer++;
+    }
+}
+
 /*-----------------------------------------------------------------------------------------------------------------------------------------------------------------
    _____  _         _             _  __      __           _         _      _
   / ____|| |       | |           | | \ \    / /          (_)       | |    | |
@@ -82,8 +94,11 @@ void floatToUint8Array(float *input, uint8_t *output, int startIndex)
 
 bool spi_new_data = false;
 
-uint8_t inputBuffer[(uint16_t)(sizeof(float) * 8)];
-uint8_t outputBuffer[(uint16_t)(sizeof(float) * 8)];
+uint8_t debug_output_buffer[34] = {0};
+
+
+uint8_t inputBuffer[(uint16_t)(sizeof(float) * 8)+2];
+uint8_t outputBuffer[(uint16_t)(sizeof(float) * 8)+2];
 
 float core1_input_values[8] = {0, 0, 0, 0, 0, 0, 0, 0};
 float core1_output_values[8] = {0, 0, 0, 0, 0, 0, 0, 0};
@@ -106,33 +121,40 @@ float loop_through_matrix[8][8] = {
 
 void core1_entry()
 {
+    
     while (true)
     {
         if (spi_is_readable(spi1))
-        {
-            spi_read_blocking(spi1, 0, inputBuffer, sizeof(float) * 8);
+        {   
 
-            
+            spi_write_read_blocking(spi1, outputBuffer, inputBuffer, (sizeof(float) * 8)+2);
+
             for (int i = 0; i < 8; i++)
             {
                 uint8ArrayToFloat(inputBuffer, i * sizeof(float), &core1_input_values[i]);
-                floatToUint8Array(&core1_output_values[i], outputBuffer, i * sizeof(float));
             }
 
             critical_section_enter_blocking(&cs1);
             for(int i = 0; i < 8; i++)
             {
                 pwm_transfer_register_output_values[i] = core1_input_values[i];
-                pwm_transfer_register_input_values[i] = core1_output_values[i];
+                core1_output_values[i] = pwm_transfer_register_input_values[i];
             }
             spi_new_data = true;
             critical_section_exit(&cs1);
 
-            // for(int i = 0; i < 8; i++)
-            // {
-            //     printf("%5.4f,", core1_input_values[i]);
-            // }
-            // printf("\n");
+            for(int i = 0; i < 8; i++)
+            {
+                floatToUint8(core1_output_values[i], outputBuffer + (sizeof(float) * i));
+            }
+
+            float temp = 0;
+            for(int i = 0; i < 8; i++)
+            {   
+                uint8ArrayToFloat(outputBuffer, i * sizeof(float), &temp);
+                //printf("%5.4f,", temp);
+            }
+            //printf("\n");
             
         }
     }
@@ -161,6 +183,8 @@ int main()
     gpio_set_function(SPI_SLAVE_MOSI_PIN, GPIO_FUNC_SPI);
     gpio_set_function(SPI_SLAVE_MISO_PIN, GPIO_FUNC_SPI);
     gpio_set_function(SPI_SLAVE_CS_PIN, GPIO_FUNC_SPI);
+
+    bi_decl(bi_4pins_with_func(SPI_SLAVE_MISO_PIN, SPI_SLAVE_MOSI_PIN, SPI_SLAVE_SCK_PIN, SPI_SLAVE_CS_PIN, GPIO_FUNC_SPI));
 
     bool selector_a = gpio_get(OUTPUT_FREQUENCY_SELECTOR_A_PIN);
     bool selector_b = gpio_get(OUTPUT_FREQUENCY_SELECTOR_B_PIN);
@@ -222,7 +246,7 @@ int main()
             critical_section_enter_blocking(&cs1);
             for(int i = 0; i < 8; i++)
             {
-                core0_input_values[i] = pwm_transfer_register_input_values[i];
+                pwm_transfer_register_input_values[i] = core0_input_values[i];
                 core0_output_values[i] = pwm_transfer_register_output_values[i];
             }
             spi_new_data = false;
