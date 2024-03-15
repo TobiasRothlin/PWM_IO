@@ -46,7 +46,7 @@ int main()
 {
     stdio_init_all();
 
-    spi_init(spi0, 10 * 1000);
+    spi_init(spi0, 1000 * 1000);
     gpio_set_function(SPI_SLAVE_SCK_PIN, GPIO_FUNC_SPI);
     gpio_set_function(SPI_SLAVE_MOSI_PIN, GPIO_FUNC_SPI);
     gpio_set_function(SPI_SLAVE_MISO_PIN, GPIO_FUNC_SPI);
@@ -65,15 +65,19 @@ int main()
     int itter = 0;
     while (true)
     {   
-        for (int i = itter; i < itter + 8; i++)
+        for (int i = 0; i <  8; i++)
         {
-            floatToUint8(pwm_output_values[i%8], output_buffer + (sizeof(float) * i%8));
-            printf("%5.4f,", pwm_output_values[i%8]);
+            floatToUint8(pwm_output_values[i], output_buffer + (sizeof(float) * i));
+            printf("%5.4f,", pwm_output_values[i]);
+            pwm_output_values[i] = pwm_output_values[i] + 0.1;
+            if (pwm_output_values[i] > 1)
+            {
+                pwm_output_values[i] = 0;
+            }
         }
         printf("\n");
         gpio_put(20,false);
         spi_write_blocking(spi0, output_buffer, sizeof(float) * 8);
-        printf("Writting SPI\n");
         gpio_put(20,true);
         sleep_ms(100);
 

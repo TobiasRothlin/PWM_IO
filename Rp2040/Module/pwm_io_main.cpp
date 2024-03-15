@@ -80,15 +80,19 @@ void floatToUint8Array(float *input, uint8_t *output, int startIndex)
   \_____||_| \___/ |_.__/  \__,_||_|     \/  \__,_||_|   |_| \__,_||_.__/ |_| \___||___/
 -----------------------------------------------------------------------------------------------------------------------------------------------------------------*/
 
-bool has_new_value = false;
+bool spi_new_data = false;
 
 uint8_t inputBuffer[(uint16_t)(sizeof(float) * 8)];
 uint8_t outputBuffer[(uint16_t)(sizeof(float) * 8)];
 
-bool spi_new_data = false;
+float core1_input_values[8] = {0, 0, 0, 0, 0, 0, 0, 0};
+float core1_output_values[8] = {0, 0, 0, 0, 0, 0, 0, 0};
 
-float pwm_output_values[8] = {0, 0, 0, 0, 0, 0, 0, 0};
-float pwm_input_values[8] = {0, 0, 0, 0, 0, 0, 0, 0};
+float core0_input_values[8] = {0, 0, 0, 0, 0, 0, 0, 0};
+float core0_output_values[8] = {0, 0, 0, 0, 0, 0, 0, 0};
+
+float pwm_transfer_register_output_values[8] = {0, 0, 0, 0, 0, 0, 0, 0};
+float pwm_transfer_register_input_values[8] = {0, 0, 0, 0, 0, 0, 0, 0};
 
 float loop_through_matrix[8][8] = {
     {1, 0, 0, 0, 0, 0, 0, 0},
@@ -101,25 +105,36 @@ float loop_through_matrix[8][8] = {
     {0, 0, 0, 0, 0, 0, 0, 1}};
 
 void core1_entry()
-{   
-    float debug_array[8];
+{
     while (true)
     {
         if (spi_is_readable(spi1))
-        {   
-            printf("Reading SPI\n");
-            critical_section_enter_blocking(&cs1);
+        {
             spi_read_blocking(spi1, 0, inputBuffer, sizeof(float) * 8);
-            critical_section_exit(&cs1);
-            spi_new_data = true;
-        }
 
-        for (int i = 0; i < 8; i++)
-        {   
-            uint8ArrayToFloat(inputBuffer, i * sizeof(float), &debug_array[i]);
-            printf("%5.4f,", debug_array[i]);
+            
+            for (int i = 0; i < 8; i++)
+            {
+                uint8ArrayToFloat(inputBuffer, i * sizeof(float), &core1_input_values[i]);
+                floatToUint8Array(&core1_output_values[i], outputBuffer, i * sizeof(float));
+            }
+
+            critical_section_enter_blocking(&cs1);
+            for(int i = 0; i < 8; i++)
+            {
+                pwm_transfer_register_output_values[i] = core1_input_values[i];
+                pwm_transfer_register_input_values[i] = core1_output_values[i];
+            }
+            spi_new_data = true;
+            critical_section_exit(&cs1);
+
+            // for(int i = 0; i < 8; i++)
+            // {
+            //     printf("%5.4f,", core1_input_values[i]);
+            // }
+            // printf("\n");
+            
         }
-        printf("\n");
     }
 }
 
@@ -140,7 +155,7 @@ int main()
     gpio_init(CONFIG_ENABLE_PIN);
     gpio_set_dir(CONFIG_ENABLE_PIN, GPIO_IN);
 
-    spi_init(spi1, 50 * 1000);
+    spi_init(spi1, 1000 * 1000);
     spi_set_slave(spi1, true);
     gpio_set_function(SPI_SLAVE_SCK_PIN, GPIO_FUNC_SPI);
     gpio_set_function(SPI_SLAVE_MOSI_PIN, GPIO_FUNC_SPI);
@@ -183,7 +198,7 @@ int main()
             // Assigns the new values (DudyCycle) to the pwm_input_values array
             if (new_read_values[2] > 0)
             {
-                pwm_input_values[idx] = new_read_values[2];
+                core0_input_values[idx] = new_read_values[2];
             }
         }
 
@@ -194,10 +209,10 @@ int main()
             // Calculate the new output values
             for (int i = 0; i < 8; i++)
             {
-                pwm_output_values[i] = 0;
+                core0_output_values[i] = 0;
                 for (int j = 0; j < 8; j++)
                 {
-                    pwm_output_values[i] += pwm_input_values[j] * loop_through_matrix[j][i];
+                    core0_output_values[i] += core0_input_values[j] * loop_through_matrix[j][i];
                 }
             }
         }
@@ -205,28 +220,24 @@ int main()
         else if (spi_new_data)
         {
             critical_section_enter_blocking(&cs1);
-            for (int i = 0; i < 8; i++)
+            for(int i = 0; i < 8; i++)
             {
-
-                floatToUint8Array(&pwm_input_values[i], outputBuffer, i * sizeof(float));
-                uint8ArrayToFloat(inputBuffer, i * sizeof(float), &pwm_output_values[i]);
-                printf("%5.4f,", pwm_output_values[i]);
+                core0_input_values[i] = pwm_transfer_register_input_values[i];
+                core0_output_values[i] = pwm_transfer_register_output_values[i];
             }
             spi_new_data = false;
             critical_section_exit(&cs1);
-            printf("\n");
         }
 
         // Write the new output values
         for (int idx = 0; idx < 8; idx++)
         {
-            // printf("PWM %1d:%7.4f, ", idx, pwm_output_values[idx]);
-            pwmOut.setPWM(idx, pwm_output_values[idx]);
+            //printf("PWM %1d:%7.4f, ", idx, core0_output_values[idx]);
+            pwmOut.setPWM(idx, core0_output_values[idx]);
         }
 
-        // printf("\n");
+        //printf("\n");
 
         gpio_put(LED_DEBUG_PIN, 0);
-        sleep_ms(100);
     }
 }
